@@ -41,26 +41,6 @@ with lib; let
 
   allShaderPaths = builtinShaders ++ cfg.shaders.custom;
 
-  # ── Build the ANSI color palette ────────────────────────────────
-  ansiPalette = if cfg.theme.nordTheme then {
-    black = cfg.theme.customColors.black or nord.nord1;
-    red = cfg.theme.customColors.red or nord.nord11;
-    green = cfg.theme.customColors.green or nord.nord14;
-    yellow = cfg.theme.customColors.yellow or nord.nord13;
-    blue = cfg.theme.customColors.blue or nord.nord10;
-    magenta = cfg.theme.customColors.magenta or nord.nord15;
-    cyan = cfg.theme.customColors.cyan or nord.nord8;
-    white = cfg.theme.customColors.white or nord.nord5;
-    bright_black = cfg.theme.customColors.bright_black or nord.nord3;
-    bright_red = cfg.theme.customColors.bright_red or nord.nord11;
-    bright_green = cfg.theme.customColors.bright_green or nord.nord14;
-    bright_yellow = cfg.theme.customColors.bright_yellow or nord.nord13;
-    bright_blue = cfg.theme.customColors.bright_blue or nord.nord9;
-    bright_magenta = cfg.theme.customColors.bright_magenta or nord.nord15;
-    bright_cyan = cfg.theme.customColors.bright_cyan or nord.nord7;
-    bright_white = cfg.theme.customColors.bright_white or nord.nord6;
-  } else {};
-
   # ── Build the complete YAML config ──────────────────────────────
   madoSettings = {
     font_family = cfg.font.family;
@@ -76,8 +56,7 @@ with lib; let
       background = cfg.appearance.background;
       foreground = cfg.appearance.foreground;
       opacity = cfg.appearance.opacity;
-    } // lib.optionalAttrs cfg.theme.nordTheme {
-      ansi_colors = ansiPalette;
+      bold_is_bright = cfg.appearance.boldIsBright;
     };
 
     shell = lib.optionalAttrs (cfg.shell.command != null) {
@@ -93,19 +72,33 @@ with lib; let
     };
 
     behavior = {
-      scrollback_limit = cfg.behavior.scrollbackLimit;
+      scrollback_lines = cfg.behavior.scrollbackLines;
       copy_on_select = cfg.behavior.copyOnSelect;
       confirm_close = cfg.behavior.confirmClose;
+      mouse_hide_while_typing = cfg.behavior.mouseHideWhileTyping;
+      mouse_scroll_multiplier = cfg.behavior.mouseScrollMultiplier;
     };
 
     performance = {
       vsync = cfg.performance.vsync;
       target_fps = cfg.performance.targetFps;
     };
-  } // lib.optionalAttrs (cfg.shaders.enable && allShaderPaths != []) {
-    shaders = map (path:
-      "${config.home.homeDirectory}/.config/mado/shaders/${builtins.baseNameOf (toString path)}"
-    ) allShaderPaths;
+
+    shell_integration = {
+      enabled = cfg.shellIntegration.enabled;
+      features = cfg.shellIntegration.features;
+    };
+
+    shaders = {
+      enabled = cfg.shaders.enable;
+      files = map (path:
+        "${config.home.homeDirectory}/.config/mado/shaders/${builtins.baseNameOf (toString path)}"
+      ) allShaderPaths;
+    };
+
+    theme = if cfg.theme.nordTheme then "nord" else cfg.theme.name;
+  } // lib.optionalAttrs (cfg.activeProfile != null) {
+    active_profile = cfg.activeProfile;
   } // cfg.extraSettings;
 
   # Generate YAML using Nix's built-in generator
@@ -198,6 +191,12 @@ in {
         default = 0.95;
         description = "Background opacity (0.0 - 1.0)";
       };
+
+      boldIsBright = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Draw bold text in bright colors";
+      };
     };
 
     # ── Shell ───────────────────────────────────────────────────────
@@ -242,7 +241,13 @@ in {
       nordTheme = mkOption {
         type = types.bool;
         default = true;
-        description = "Use Nord color theme for ANSI palette";
+        description = "Use Nord color theme (theme = \"nord\")";
+      };
+
+      name = mkOption {
+        type = types.str;
+        default = "nord";
+        description = "Theme name when nordTheme is false (e.g. dracula, solarized-light)";
       };
 
       customColors = mkOption {
@@ -256,9 +261,31 @@ in {
       };
     };
 
+    # ── Shell integration ───────────────────────────────────────────
+    shellIntegration = {
+      enabled = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable shell integration features";
+      };
+
+      features = mkOption {
+        type = types.listOf types.str;
+        default = [ "cursor" "sudo" "title" ];
+        description = "Shell integration features to enable";
+      };
+    };
+
+    # ── Active profile ─────────────────────────────────────────────
+    activeProfile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Name of the profile to activate (null = use default config)";
+    };
+
     # ── Behavior ────────────────────────────────────────────────────
     behavior = {
-      scrollbackLimit = mkOption {
+      scrollbackLines = mkOption {
         type = types.int;
         default = 10000;
         description = "Number of lines in scrollback buffer";
@@ -274,6 +301,18 @@ in {
         type = types.bool;
         default = false;
         description = "Confirm before closing terminal window";
+      };
+
+      mouseHideWhileTyping = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Hide mouse cursor while typing";
+      };
+
+      mouseScrollMultiplier = mkOption {
+        type = types.int;
+        default = 2;
+        description = "Mouse scroll wheel multiplier";
       };
     };
 
